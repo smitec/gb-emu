@@ -5,6 +5,7 @@ pub enum Instruction {
     AddC(TargetRegister),
     Sub(TargetRegister),
     SubC(TargetRegister),
+    Compare(TargetRegister),
     Set(TargetRegister, u8),
     Reset(TargetRegister, u8),
     Inc(TargetRegister),
@@ -44,7 +45,6 @@ pub enum BinaryOp {
     AND,
     OR,
     XOR,
-    CP,
 }
 
 #[derive(Clone, Copy)]
@@ -56,6 +56,7 @@ pub enum TargetRegister {
     E,
     H,
     L, // Note: Not F
+    D8,
 }
 
 #[derive(Clone, Copy)]
@@ -309,15 +310,78 @@ impl Instruction {
             0xB5 => Some(Self::BinaryOp(TargetRegister::L, BinaryOp::OR)),
             0xB6 => todo!(), // OR a,(hl)
             0xB7 => Some(Self::BinaryOp(TargetRegister::A, BinaryOp::OR)),
-            0xB8 => Some(Self::BinaryOp(TargetRegister::B, BinaryOp::CP)),
-            0xB9 => Some(Self::BinaryOp(TargetRegister::C, BinaryOp::CP)),
-            0xBA => Some(Self::BinaryOp(TargetRegister::D, BinaryOp::CP)),
-            0xBB => Some(Self::BinaryOp(TargetRegister::E, BinaryOp::CP)),
-            0xBC => Some(Self::BinaryOp(TargetRegister::H, BinaryOp::CP)),
-            0xBD => Some(Self::BinaryOp(TargetRegister::L, BinaryOp::CP)),
+            0xB8 => Some(Self::Compare(TargetRegister::B)),
+            0xB9 => Some(Self::Compare(TargetRegister::C)),
+            0xBA => Some(Self::Compare(TargetRegister::D)),
+            0xBB => Some(Self::Compare(TargetRegister::E)),
+            0xBC => Some(Self::Compare(TargetRegister::H)),
+            0xBD => Some(Self::Compare(TargetRegister::L)),
             0xBE => todo!(), // CP a,(hl)
-            0xBF => Some(Self::BinaryOp(TargetRegister::A, BinaryOp::CP)),
-            _ => todo!(),
+            0xBF => Some(Self::Compare(TargetRegister::A)),
+            0xC0 => Some(Self::Return(JumpTest::NotZero)),
+            0xC1 => Some(Self::Pop(StackTarget::BC)),
+            0xC2 => Some(Self::Jump(JumpTest::NotZero)),
+            0xC3 => Some(Self::Jump(JumpTest::Always)),
+            0xC4 => Some(Self::Call(JumpTest::NotZero)),
+            0xC5 => Some(Self::Push(StackTarget::BC)),
+            0xC6 => Some(Self::Add(TargetRegister::D8)),
+            0xC7 => todo!(), // RST 00H
+            0xC8 => Some(Self::Return(JumpTest::Zero)),
+            0xC9 => Some(Self::Return(JumpTest::Always)),
+            0xCA => Some(Self::Jump(JumpTest::Zero)),
+            0xCB => None, // Handled by the prefix Check
+            0xCC => Some(Self::Call(JumpTest::Zero)),
+            0xCD => Some(Self::Call(JumpTest::Always)),
+            0xCE => Some(Self::AddC(TargetRegister::D8)),
+            0xCF => todo!(), // RST 08H
+            0xD0 => Some(Self::Return(JumpTest::NotCarry)),
+            0xD1 => Some(Self::Pop(StackTarget::DE)),
+            0xD2 => Some(Self::Jump(JumpTest::NotCarry)),
+            0xD3 => panic!("No Instruction 0xD3"),
+            0xD4 => Some(Self::Call(JumpTest::NotCarry)),
+            0xD5 => Some(Self::Push(StackTarget::DE)),
+            0xD6 => Some(Self::Sub(TargetRegister::D8)),
+            0xD7 => todo!(), // RST 10H
+            0xD8 => Some(Self::Return(JumpTest::Carry)),
+            0xD9 => todo!(), // RETI
+            0xDA => Some(Self::Jump(JumpTest::Carry)),
+            0xDB => panic!("No Instruction 0xDB"),
+            0xDC => Some(Self::Call(JumpTest::Carry)),
+            0xDD => panic!("No Instruction 0xDD"),
+            0xDE => Some(Self::SubC(TargetRegister::D8)),
+            0xDF => todo!(), // RST 18H
+            0xE0 => todo!(), // LDH (a8),A
+            0xE1 => Some(Self::Pop(StackTarget::HL)),
+            0xE2 => todo!(), // LD (C), A
+            0xE3 => panic!("No Instruction 0xE3"),
+            0xE4 => panic!("No Instruction 0xE4"),
+            0xE5 => Some(Self::Push(StackTarget::HL)),
+            0xE6 => Some(Self::BinaryOp(TargetRegister::D8, BinaryOp::AND)),
+            0xE7 => todo!(), // RST 20H
+            0xE8 => todo!(), // ADD SP, R8 (2, 16)
+            0xE9 => todo!(), // JP (HL)
+            0xEA => todo!(), // LD (a16),A
+            0xEB => panic!("No Instruction 0xEB"),
+            0xEC => panic!("No Instruction 0xEC"),
+            0xED => panic!("No Instruction 0xED"),
+            0xEE => Some(Self::BinaryOp(TargetRegister::D8, BinaryOp::XOR)),
+            0xEF => todo!(), // RST 28H
+            0xF0 => todo!(), // LD A,(a8)
+            0xF1 => Some(Self::Pop(StackTarget::AF)),
+            0xF2 => todo!(), // LD A,(C)
+            0xF3 => todo!(), // DI
+            0xF4 => panic!("No Instruction 0xF4"),
+            0xF5 => Some(Self::Push(StackTarget::AF)),
+            0xF6 => Some(Self::BinaryOp(TargetRegister::D8, BinaryOp::OR)),
+            0xF7 => todo!(), // RST 30H
+            0xF8 => todo!(), // LD HL,SP+r8
+            0xF9 => todo!(), // LD SP,HL
+            0xFA => todo!(), // LD A,(a16)
+            0xFB => todo!(), // EI
+            0xFC => panic!("No Instruction 0xFC"),
+            0xFD => panic!("No Instruction 0xFD"),
+            0xFE => Some(Self::Compare(TargetRegister::D8)),
+            0xFF => todo!(), // RST 38H
         }
     }
 }

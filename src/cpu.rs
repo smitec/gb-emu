@@ -205,8 +205,6 @@ impl Cpu {
 
                 self.jump(condition)
             }
-            // TODO: LoadWord, LoadAFromIndirect, LoadIndirectFromA, Load AFromByteAddress,
-            // LoadByteAddressFromA
             Instruction::LoadByte(target, source) => {
                 let value = match source {
                     LoadByteSource::A => self.registers.a,
@@ -282,6 +280,9 @@ impl Cpu {
                 self.halted = true;
                 self.program_counter.wrapping_add(2)
             }
+            Instruction::Sub(_) => todo!(),
+            Instruction::SubC(_) => todo!(),
+            Instruction::Compare(_) => todo!(),
         }
     }
 
@@ -294,6 +295,7 @@ impl Cpu {
             TargetRegister::E => self.registers.e,
             TargetRegister::H => self.registers.h,
             TargetRegister::L => self.registers.l,
+            TargetRegister::D8 => self.memory.read_byte(self.program_counter.wrapping_add(1)),
         }
     }
 
@@ -306,6 +308,7 @@ impl Cpu {
             TargetRegister::E => &mut self.registers.e,
             TargetRegister::H => &mut self.registers.h,
             TargetRegister::L => &mut self.registers.l,
+            TargetRegister::D8 => panic!("Cannot Write to D8"),
         }
     }
 
