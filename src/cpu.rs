@@ -216,6 +216,8 @@ impl Cpu {
                     LoadByteSource::L => self.registers.l,
                     LoadByteSource::D8 => self.memory.read_byte(self.program_counter + 1),
                     LoadByteSource::HLI => self.memory.read_byte(self.registers.get_hl()),
+                    LoadByteSource::BCI => self.memory.read_byte(self.registers.get_bc()),
+                    LoadByteSource::DEI => self.memory.read_byte(self.registers.get_de()),
                 };
 
                 match target {
@@ -227,6 +229,8 @@ impl Cpu {
                     LoadByteTarget::H => self.registers.h = value,
                     LoadByteTarget::L => self.registers.l = value,
                     LoadByteTarget::HLI => self.memory.write_byte(self.registers.get_hl(), value),
+                    LoadByteTarget::BCI => self.memory.write_byte(self.registers.get_bc(), value),
+                    LoadByteTarget::DEI => self.memory.write_byte(self.registers.get_de(), value),
                 };
 
                 match source {
@@ -280,9 +284,33 @@ impl Cpu {
                 self.halted = true;
                 self.program_counter.wrapping_add(2)
             }
-            Instruction::Sub(_) => todo!(),
-            Instruction::SubC(_) => todo!(),
-            Instruction::Compare(_) => todo!(),
+            Instruction::Compare(target) => {
+                let value: u8 = self.register_value(target);
+                self.subtract(value);
+
+                self.program_counter + 1
+            }
+            Instruction::Sub(target) => {
+                let value: u8 = self.register_value(target);
+                let new_v = self.subtract(value);
+                self.registers.a = new_v;
+
+                self.program_counter + 1
+            }
+            Instruction::SubC(target) => {
+                let value: u8 = self.register_value(target);
+                let c = if self.registers.f.carry { 1 } else { 0 } as u8;
+
+                self.subtract(c);
+                let mid_carry = self.registers.f.carry;
+
+                let new_v = self.subtract(value);
+
+                self.registers.f.carry |= mid_carry;
+                self.registers.a = new_v;
+
+                self.program_counter + 1
+            }
         }
     }
 
@@ -366,6 +394,15 @@ impl Cpu {
         let (new_v, overflow) = self.registers.a.overflowing_add(value);
         self.registers.f.zero = new_v == 0;
         self.registers.f.subtract = false;
+        self.registers.f.carry = overflow;
+        self.registers.f.half_carry = (self.registers.a & 0xF) + (value & 0xF) > 0xF;
+        new_v
+    }
+
+    fn subtract(&mut self, value: u8) -> u8 {
+        let (new_v, overflow) = self.registers.a.overflowing_sub(value);
+        self.registers.f.zero = new_v == 0;
+        self.registers.f.subtract = true;
         self.registers.f.carry = overflow;
         self.registers.f.half_carry = (self.registers.a & 0xF) + (value & 0xF) > 0xF;
         new_v
