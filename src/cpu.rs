@@ -324,6 +324,7 @@ impl Cpu {
             TargetRegister::H => self.registers.h,
             TargetRegister::L => self.registers.l,
             TargetRegister::D8 => self.memory.read_byte(self.program_counter.wrapping_add(1)),
+            TargetRegister::HLI => self.memory.read_byte(self.registers.get_hl()),
         }
     }
 
@@ -336,7 +337,8 @@ impl Cpu {
             TargetRegister::E => &mut self.registers.e,
             TargetRegister::H => &mut self.registers.h,
             TargetRegister::L => &mut self.registers.l,
-            TargetRegister::D8 => panic!("Cannot Write to D8"),
+            TargetRegister::D8 => panic!("Cannot Write to D8 as a register"),
+            TargetRegister::HLI => panic!("Cannot Write to HLI as a register"),
         }
     }
 

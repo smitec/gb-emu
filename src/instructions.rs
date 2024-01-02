@@ -57,6 +57,7 @@ pub enum TargetRegister {
     H,
     L, // Note: Not F
     D8,
+    HLI,
 }
 
 #[derive(Clone, Copy)]
@@ -242,21 +243,21 @@ impl Instruction {
             0x6D => Some(Self::LoadByte(LoadByteTarget::L, LoadByteSource::L)),
             0x6E => Some(Self::LoadByte(LoadByteTarget::L, LoadByteSource::HLI)),
             0x6F => Some(Self::LoadByte(LoadByteTarget::L, LoadByteSource::A)),
-            0x70 => todo!(), // LD (HL),B
-            0x71 => todo!(), // LD (HL),C
-            0x72 => todo!(), // LD (HL),D
-            0x73 => todo!(), // LD (HL),E
-            0x74 => todo!(), // LD (HL),H
-            0x75 => todo!(), // LD (HL),L
+            0x70 => Some(Self::LoadByte(LoadByteTarget::HLI, LoadByteSource::B)),
+            0x71 => Some(Self::LoadByte(LoadByteTarget::HLI, LoadByteSource::C)),
+            0x72 => Some(Self::LoadByte(LoadByteTarget::HLI, LoadByteSource::D)),
+            0x73 => Some(Self::LoadByte(LoadByteTarget::HLI, LoadByteSource::E)),
+            0x74 => Some(Self::LoadByte(LoadByteTarget::HLI, LoadByteSource::H)),
+            0x75 => Some(Self::LoadByte(LoadByteTarget::HLI, LoadByteSource::L)),
             0x76 => todo!(), // HALT
-            0x77 => todo!(), // LD (HL),A
+            0x77 => Some(Self::LoadByte(LoadByteTarget::HLI, LoadByteSource::A)),
             0x78 => Some(Self::LoadByte(LoadByteTarget::A, LoadByteSource::B)),
             0x79 => Some(Self::LoadByte(LoadByteTarget::A, LoadByteSource::C)),
             0x7A => Some(Self::LoadByte(LoadByteTarget::A, LoadByteSource::D)),
             0x7B => Some(Self::LoadByte(LoadByteTarget::A, LoadByteSource::E)),
             0x7C => Some(Self::LoadByte(LoadByteTarget::A, LoadByteSource::H)),
             0x7D => Some(Self::LoadByte(LoadByteTarget::A, LoadByteSource::L)),
-            0x7E => todo!(), // LD A,(HL) (1, 8)
+            0x7E => Some(Self::LoadByte(LoadByteTarget::A, LoadByteSource::HLI)),
             0x7F => Some(Self::LoadByte(LoadByteTarget::A, LoadByteSource::A)),
             0x80 => Some(Self::Add(TargetRegister::B)),
             0x81 => Some(Self::Add(TargetRegister::C)),
@@ -264,7 +265,7 @@ impl Instruction {
             0x83 => Some(Self::Add(TargetRegister::E)),
             0x84 => Some(Self::Add(TargetRegister::H)),
             0x85 => Some(Self::Add(TargetRegister::L)),
-            0x86 => todo!(), // ADD A,(HL)
+            0x86 => Some(Self::Add(TargetRegister::HLI)),
             0x87 => Some(Self::Add(TargetRegister::A)),
             0x88 => Some(Self::AddC(TargetRegister::B)),
             0x89 => Some(Self::AddC(TargetRegister::C)),
@@ -272,7 +273,7 @@ impl Instruction {
             0x8B => Some(Self::AddC(TargetRegister::E)),
             0x8C => Some(Self::AddC(TargetRegister::H)),
             0x8D => Some(Self::AddC(TargetRegister::L)),
-            0x8E => todo!(), // ADDC A,(HL)
+            0x8E => Some(Self::AddC(TargetRegister::HLI)),
             0x8F => Some(Self::AddC(TargetRegister::A)),
             0x90 => Some(Self::Sub(TargetRegister::B)),
             0x91 => Some(Self::Sub(TargetRegister::C)),
@@ -280,7 +281,7 @@ impl Instruction {
             0x93 => Some(Self::Sub(TargetRegister::E)),
             0x94 => Some(Self::Sub(TargetRegister::H)),
             0x95 => Some(Self::Sub(TargetRegister::L)),
-            0x96 => todo!(), // ADD A,(HL)
+            0x96 => Some(Self::Sub(TargetRegister::HLI)),
             0x97 => Some(Self::Sub(TargetRegister::A)),
             0x98 => Some(Self::SubC(TargetRegister::B)),
             0x99 => Some(Self::SubC(TargetRegister::C)),
@@ -288,7 +289,7 @@ impl Instruction {
             0x9B => Some(Self::SubC(TargetRegister::E)),
             0x9C => Some(Self::SubC(TargetRegister::H)),
             0x9D => Some(Self::SubC(TargetRegister::L)),
-            0x9E => todo!(), // ADDC A,(HL)
+            0x9E => Some(Self::SubC(TargetRegister::HLI)),
             0x9F => Some(Self::SubC(TargetRegister::A)),
             0xA0 => Some(Self::BinaryOp(TargetRegister::B, BinaryOp::AND)),
             0xA1 => Some(Self::BinaryOp(TargetRegister::C, BinaryOp::AND)),
@@ -296,7 +297,7 @@ impl Instruction {
             0xA3 => Some(Self::BinaryOp(TargetRegister::E, BinaryOp::AND)),
             0xA4 => Some(Self::BinaryOp(TargetRegister::H, BinaryOp::AND)),
             0xA5 => Some(Self::BinaryOp(TargetRegister::L, BinaryOp::AND)),
-            0xA6 => todo!(), // AND a,(hl)
+            0xA6 => Some(Self::BinaryOp(TargetRegister::HLI, BinaryOp::AND)),
             0xA7 => Some(Self::BinaryOp(TargetRegister::A, BinaryOp::AND)),
             0xA8 => Some(Self::BinaryOp(TargetRegister::B, BinaryOp::XOR)),
             0xA9 => Some(Self::BinaryOp(TargetRegister::C, BinaryOp::XOR)),
@@ -304,7 +305,7 @@ impl Instruction {
             0xAB => Some(Self::BinaryOp(TargetRegister::E, BinaryOp::XOR)),
             0xAC => Some(Self::BinaryOp(TargetRegister::H, BinaryOp::XOR)),
             0xAD => Some(Self::BinaryOp(TargetRegister::L, BinaryOp::XOR)),
-            0xAE => todo!(), // XOR a,(hl)
+            0xAE => Some(Self::BinaryOp(TargetRegister::HLI, BinaryOp::XOR)),
             0xAF => Some(Self::BinaryOp(TargetRegister::A, BinaryOp::XOR)),
             0xB0 => Some(Self::BinaryOp(TargetRegister::B, BinaryOp::OR)),
             0xB1 => Some(Self::BinaryOp(TargetRegister::C, BinaryOp::OR)),
@@ -312,7 +313,7 @@ impl Instruction {
             0xB3 => Some(Self::BinaryOp(TargetRegister::E, BinaryOp::OR)),
             0xB4 => Some(Self::BinaryOp(TargetRegister::H, BinaryOp::OR)),
             0xB5 => Some(Self::BinaryOp(TargetRegister::L, BinaryOp::OR)),
-            0xB6 => todo!(), // OR a,(hl)
+            0xB6 => Some(Self::BinaryOp(TargetRegister::HLI, BinaryOp::OR)),
             0xB7 => Some(Self::BinaryOp(TargetRegister::A, BinaryOp::OR)),
             0xB8 => Some(Self::Compare(TargetRegister::B)),
             0xB9 => Some(Self::Compare(TargetRegister::C)),
@@ -320,7 +321,7 @@ impl Instruction {
             0xBB => Some(Self::Compare(TargetRegister::E)),
             0xBC => Some(Self::Compare(TargetRegister::H)),
             0xBD => Some(Self::Compare(TargetRegister::L)),
-            0xBE => todo!(), // CP a,(hl)
+            0xBE => Some(Self::Compare(TargetRegister::HLI)),
             0xBF => Some(Self::Compare(TargetRegister::A)),
             0xC0 => Some(Self::Return(JumpTest::NotZero)),
             0xC1 => Some(Self::Pop(StackTarget::BC)),
