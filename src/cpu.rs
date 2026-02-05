@@ -206,35 +206,61 @@ impl Cpu {
                 self.jump(condition)
             }
             Instruction::LoadByte(target, source) => {
-                let value = match source {
-                    LoadByteSource::A => self.registers.a,
-                    LoadByteSource::B => self.registers.b,
-                    LoadByteSource::C => self.registers.c,
-                    LoadByteSource::D => self.registers.d,
-                    LoadByteSource::E => self.registers.e,
-                    LoadByteSource::H => self.registers.h,
-                    LoadByteSource::L => self.registers.l,
-                    LoadByteSource::D8 => self.memory.read_byte(self.program_counter + 1),
-                    LoadByteSource::HLI => self.memory.read_byte(self.registers.get_hl()),
-                    LoadByteSource::BCI => self.memory.read_byte(self.registers.get_bc()),
-                    LoadByteSource::DEI => self.memory.read_byte(self.registers.get_de()),
+                let value: u16 = match source {
+                    LoadByteSource::A => self.registers.a as u16,
+                    LoadByteSource::B => self.registers.b as u16,
+                    LoadByteSource::C => self.registers.c as u16,
+                    LoadByteSource::D => self.registers.d as u16,
+                    LoadByteSource::E => self.registers.e as u16,
+                    LoadByteSource::H => self.registers.h as u16,
+                    LoadByteSource::L => self.registers.l as u16,
+                    LoadByteSource::D8 => self.memory.read_byte(self.program_counter + 1) as u16,
+                    LoadByteSource::D16 => {
+                        ((self.memory.read_byte(self.program_counter + 1) as u16) << 8)
+                            + self.memory.read_byte(self.program_counter + 2) as u16
+                    }
+                    LoadByteSource::HLI => self.memory.read_byte(self.registers.get_hl()) as u16,
+                    LoadByteSource::BCI => self.memory.read_byte(self.registers.get_bc()) as u16,
+                    LoadByteSource::DEI => self.memory.read_byte(self.registers.get_de()) as u16,
                 };
 
                 match target {
-                    LoadByteTarget::A => self.registers.a = value,
-                    LoadByteTarget::B => self.registers.b = value,
-                    LoadByteTarget::C => self.registers.c = value,
-                    LoadByteTarget::D => self.registers.d = value,
-                    LoadByteTarget::E => self.registers.e = value,
-                    LoadByteTarget::H => self.registers.h = value,
-                    LoadByteTarget::L => self.registers.l = value,
-                    LoadByteTarget::HLI => self.memory.write_byte(self.registers.get_hl(), value),
-                    LoadByteTarget::BCI => self.memory.write_byte(self.registers.get_bc(), value),
-                    LoadByteTarget::DEI => self.memory.write_byte(self.registers.get_de(), value),
+                    LoadByteTarget::A => self.registers.a = (value & 0x0F) as u8,
+                    LoadByteTarget::B => self.registers.b = (value & 0x0F) as u8,
+                    LoadByteTarget::C => self.registers.c = (value & 0x0F) as u8,
+                    LoadByteTarget::D => self.registers.d = (value & 0x0F) as u8,
+                    LoadByteTarget::E => self.registers.e = (value & 0x0F) as u8,
+                    LoadByteTarget::H => self.registers.h = (value & 0x0F) as u8,
+                    LoadByteTarget::L => self.registers.l = (value & 0x0F) as u8,
+                    LoadByteTarget::BC => {
+                        self.registers.b = ((value & 0xF0) >> 8) as u8;
+                        self.registers.c = (value & 0x0F) as u8;
+                    }
+                    LoadByteTarget::DE => {
+                        self.registers.d = ((value & 0xF0) >> 8) as u8;
+                        self.registers.e = (value & 0x0F) as u8;
+                    }
+                    LoadByteTarget::HL => {
+                        self.registers.h = ((value & 0xF0) >> 8) as u8;
+                        self.registers.l = (value & 0x0F) as u8;
+                    }
+                    LoadByteTarget::SP => {
+                        self.stack_pointer = value;
+                    }
+                    LoadByteTarget::HLI => self
+                        .memory
+                        .write_byte(self.registers.get_hl(), (value & 0x0F) as u8),
+                    LoadByteTarget::BCI => self
+                        .memory
+                        .write_byte(self.registers.get_bc(), (value & 0x0F) as u8),
+                    LoadByteTarget::DEI => self
+                        .memory
+                        .write_byte(self.registers.get_de(), (value & 0x0F) as u8),
                 };
 
                 match source {
                     LoadByteSource::D8 => self.program_counter.wrapping_add(2),
+                    LoadByteSource::D16 => self.program_counter.wrapping_add(3),
                     _ => self.program_counter.wrapping_add(1),
                 }
             }

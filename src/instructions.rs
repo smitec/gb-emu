@@ -77,9 +77,13 @@ pub enum LoadByteTarget {
     E,
     H,
     L,
-    HLI,
-    BCI,
-    DEI,
+    BC,
+    DE,
+    HL,
+    SP,
+    HLI, // Load from the address HL
+    BCI, // Load from the address BC
+    DEI, // Load from the address DE
 }
 
 #[derive(Clone, Copy)]
@@ -92,9 +96,10 @@ pub enum LoadByteSource {
     H,
     L,
     D8,
-    HLI,
-    BCI,
-    DEI,
+    D16,
+    HLI, // High Low Immediate
+    BCI, // BC Immediate
+    DEI, // DE Immediate
 }
 
 impl Instruction {
@@ -116,7 +121,7 @@ impl Instruction {
     fn from_byte_not_prefixed(byte: u8) -> Option<Instruction> {
         match byte {
             0x00 => Some(Self::Nop),
-            0x01 => todo!(), // LD BC,d16 (3, 12)
+            0x01 => Some(Self::LoadByte(LoadByteTarget::BC, LoadByteSource::D16)),
             0x02 => Some(Self::LoadByte(LoadByteTarget::BCI, LoadByteSource::A)),
             0x03 => todo!(), // INC BC
             0x04 => Some(Self::Inc(TargetRegister::B)),
@@ -140,7 +145,7 @@ impl Instruction {
                 false,
             )),
             0x10 => Some(Self::Halt),
-            0x11 => todo!(), // LD DE,d16 (3, 12)
+            0x11 => Some(Self::LoadByte(LoadByteTarget::DE, LoadByteSource::D16)),
             0x12 => Some(Self::LoadByte(LoadByteTarget::DEI, LoadByteSource::A)),
             0x13 => todo!(), // INC DE (1 8)
             0x14 => Some(Self::Inc(TargetRegister::D)),
@@ -164,7 +169,7 @@ impl Instruction {
                 true,
             )),
             0x20 => todo!(), // JR NZ, r8 (2, 12/8)
-            0x21 => todo!(), // LD HL,d16 (3, 12)
+            0x21 => Some(Self::LoadByte(LoadByteTarget::HL, LoadByteSource::D16)),
             0x22 => todo!(), // LD (HL+),A (1, 8)
             0x23 => todo!(), // INC HL (1 8)
             0x24 => Some(Self::Inc(TargetRegister::H)),
@@ -180,7 +185,7 @@ impl Instruction {
             0x2E => Some(Self::LoadByte(LoadByteTarget::L, LoadByteSource::D8)),
             0x2F => todo!(), // CPL (1, 4)
             0x30 => todo!(), // JR NC, r8 (2, 12/8)
-            0x31 => todo!(), // LD SP,d16 (3, 12)
+            0x31 => Some(Self::LoadByte(LoadByteTarget::SP, LoadByteSource::D16)),
             0x32 => todo!(), // LD (HL-),A (1, 8)
             0x33 => todo!(), // INC SP (1 8)
             0x34 => todo!(), // INC (HL) (1, 12)
