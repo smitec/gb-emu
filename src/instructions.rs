@@ -10,6 +10,8 @@ pub enum Instruction {
     Reset(TargetRegister, u8),
     Inc(TargetRegister),
     Dec(TargetRegister),
+    Inc16(TargetRegister16),
+    Dec16(TargetRegister16),
     ShiftLeft(TargetRegister, ShiftMode, WithCarry),
     ShiftRight(TargetRegister, ShiftMode, WithCarry),
     BinaryOp(TargetRegister, BinaryOp),
@@ -61,6 +63,14 @@ pub enum TargetRegister {
 }
 
 #[derive(Clone, Copy)]
+pub enum TargetRegister16 {
+    BC,
+    DE,
+    HL,
+    SP,
+}
+
+#[derive(Clone, Copy)]
 pub enum StackTarget {
     BC,
     DE,
@@ -81,6 +91,7 @@ pub enum LoadByteTarget {
     DE,
     HL,
     SP,
+    A16,
     HLI, // Load from the address HL
     BCI, // Load from the address BC
     DEI, // Load from the address DE
@@ -97,6 +108,7 @@ pub enum LoadByteSource {
     L,
     D8,
     D16,
+    SP,
     HLI, // High Low Immediate
     BCI, // BC Immediate
     DEI, // DE Immediate
@@ -132,13 +144,13 @@ impl Instruction {
                 ShiftMode::Arithmetic,
                 false,
             )),
-            0x08 => todo!(), // LD (a16), SP (3, 20)
+            0x08 => Some(Self::LoadByte(LoadByteTarget::A16, LoadByteSource::SP)),
             0x09 => todo!(), // ADD HL, BC (1,8)
             0x0A => Some(Self::LoadByte(LoadByteTarget::A, LoadByteSource::BCI)),
             0x0B => todo!(), // DEC BC (1, 8)
             0x0C => Some(Self::Inc(TargetRegister::C)),
             0x0D => Some(Self::Dec(TargetRegister::C)),
-            0x0E => todo!(),
+            0x0E => Some(Self::LoadByte(LoadByteTarget::C, LoadByteSource::D8)),
             0x0F => Some(Self::ShiftRight(
                 TargetRegister::A,
                 ShiftMode::Arithmetic,

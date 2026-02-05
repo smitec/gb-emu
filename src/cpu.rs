@@ -219,6 +219,7 @@ impl Cpu {
                         ((self.memory.read_byte(self.program_counter + 1) as u16) << 8)
                             + self.memory.read_byte(self.program_counter + 2) as u16
                     }
+                    LoadByteSource::SP => self.stack_pointer,
                     LoadByteSource::HLI => self.memory.read_byte(self.registers.get_hl()) as u16,
                     LoadByteSource::BCI => self.memory.read_byte(self.registers.get_bc()) as u16,
                     LoadByteSource::DEI => self.memory.read_byte(self.registers.get_de()) as u16,
@@ -247,6 +248,12 @@ impl Cpu {
                     LoadByteTarget::SP => {
                         self.stack_pointer = value;
                     }
+                    LoadByteTarget::A16 => {
+                        self.memory
+                            .write_byte(value, ((self.stack_pointer & 0xF0) >> 8) as u8);
+                        self.memory
+                            .write_byte(value + 1, (self.stack_pointer & 0x0F) as u8);
+                    }
                     LoadByteTarget::HLI => self
                         .memory
                         .write_byte(self.registers.get_hl(), (value & 0x0F) as u8),
@@ -258,10 +265,16 @@ impl Cpu {
                         .write_byte(self.registers.get_de(), (value & 0x0F) as u8),
                 };
 
-                match source {
+                let source_add = match source {
                     LoadByteSource::D8 => self.program_counter.wrapping_add(2),
                     LoadByteSource::D16 => self.program_counter.wrapping_add(3),
                     _ => self.program_counter.wrapping_add(1),
+                };
+
+                // Add extra cycles to some targets
+                match target {
+                    LoadByteTarget::A16 => source_add.wrapping_add(2), // Total 3
+                    _ => source_add,
                 }
             }
             Instruction::Push(target) => {
@@ -337,6 +350,8 @@ impl Cpu {
 
                 self.program_counter + 1
             }
+            Instruction::Inc16(target) => todo!(),
+            Instruction::Dec16(target) => todo!(),
         }
     }
 
