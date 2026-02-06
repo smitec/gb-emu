@@ -48,7 +48,7 @@ impl Cpu {
                 let new_v = self.add(value);
                 self.registers.a = new_v;
 
-                self.program_counter + 1
+                self.program_counter.wrapping_add(1)
             }
             Instruction::AddC(target) => {
                 let value: u8 = self.register_value(target);
@@ -62,21 +62,21 @@ impl Cpu {
                 self.registers.f.carry |= mid_carry;
                 self.registers.a = new_v;
 
-                self.program_counter + 1
+                self.program_counter.wrapping_add(1)
             }
             Instruction::Set(target, bit) => {
                 let register: &mut u8 = self.register_reference(target);
                 let value = set(*register, bit);
                 *register = value;
 
-                self.program_counter + 2
+                self.program_counter.wrapping_add(2)
             }
             Instruction::Reset(target, bit) => {
                 let register: &mut u8 = self.register_reference(target);
                 let value = reset(*register, bit);
                 *register = value;
 
-                self.program_counter + 2
+                self.program_counter.wrapping_add(2)
             }
             Instruction::Inc(target) => {
                 let original: u8 = self.register_value(target);
@@ -89,7 +89,7 @@ impl Cpu {
                 let register: &mut u8 = self.register_reference(target);
                 *register = value;
 
-                self.program_counter + 1
+                self.program_counter.wrapping_add(1)
             }
             Instruction::Dec(target) => {
                 let original: u8 = self.register_value(target);
@@ -102,7 +102,7 @@ impl Cpu {
                 let register: &mut u8 = self.register_reference(target);
                 *register = value;
 
-                self.program_counter + 1
+                self.program_counter.wrapping_add(1)
             }
             Instruction::ShiftLeft(target, mode, with_carry) => {
                 let original: u8 = self.register_value(target);
@@ -178,7 +178,7 @@ impl Cpu {
                     BinaryOp::XOR => false,
                 };
 
-                self.program_counter + 1
+                self.program_counter.wrapping_add(1)
             }
             Instruction::Swap(target) => {
                 let value: u8 = self.register_value(target);
@@ -192,7 +192,7 @@ impl Cpu {
                 let register: &mut u8 = self.register_reference(target);
                 *register = new_value;
 
-                self.program_counter + 2
+                self.program_counter.wrapping_add(2)
             }
             Instruction::Jump(test) => {
                 let condition: bool = match test {
@@ -327,14 +327,14 @@ impl Cpu {
                 let value: u8 = self.register_value(target);
                 self.subtract(value);
 
-                self.program_counter + 1
+                self.program_counter.wrapping_add(1)
             }
             Instruction::Sub(target) => {
                 let value: u8 = self.register_value(target);
                 let new_v = self.subtract(value);
                 self.registers.a = new_v;
 
-                self.program_counter + 1
+                self.program_counter.wrapping_add(1)
             }
             Instruction::SubC(target) => {
                 let value: u8 = self.register_value(target);
@@ -348,10 +348,64 @@ impl Cpu {
                 self.registers.f.carry |= mid_carry;
                 self.registers.a = new_v;
 
-                self.program_counter + 1
+                self.program_counter.wrapping_add(1)
             }
-            Instruction::Inc16(target) => todo!(),
-            Instruction::Dec16(target) => todo!(),
+            Instruction::Inc16(target) => {
+                let mut register: u16 = match target {
+                    TargetRegister16::BC => self.registers.get_bc(),
+                    TargetRegister16::DE => self.registers.get_de(),
+                    TargetRegister16::HL => self.registers.get_hl(),
+                    TargetRegister16::SP => self.stack_pointer,
+                };
+
+                register = register.wrapping_add(1);
+
+                match target {
+                    TargetRegister16::BC => {
+                        self.registers.b = ((register & 0xF0) >> 8) as u8;
+                        self.registers.c = (register & 0x0F) as u8;
+                    }
+                    TargetRegister16::DE => {
+                        self.registers.d = ((register & 0xF0) >> 8) as u8;
+                        self.registers.e = (register & 0x0F) as u8;
+                    }
+                    TargetRegister16::HL => {
+                        self.registers.h = ((register & 0xF0) >> 8) as u8;
+                        self.registers.l = (register & 0x0F) as u8;
+                    }
+                    TargetRegister16::SP => self.stack_pointer = register,
+                }
+
+                self.program_counter.wrapping_add(1)
+            }
+            Instruction::Dec16(target) => {
+                let mut register: u16 = match target {
+                    TargetRegister16::BC => self.registers.get_bc(),
+                    TargetRegister16::DE => self.registers.get_de(),
+                    TargetRegister16::HL => self.registers.get_hl(),
+                    TargetRegister16::SP => self.stack_pointer,
+                };
+
+                register = register.wrapping_sub(1);
+
+                match target {
+                    TargetRegister16::BC => {
+                        self.registers.b = ((register & 0xF0) >> 8) as u8;
+                        self.registers.c = (register & 0x0F) as u8;
+                    }
+                    TargetRegister16::DE => {
+                        self.registers.d = ((register & 0xF0) >> 8) as u8;
+                        self.registers.e = (register & 0x0F) as u8;
+                    }
+                    TargetRegister16::HL => {
+                        self.registers.h = ((register & 0xF0) >> 8) as u8;
+                        self.registers.l = (register & 0x0F) as u8;
+                    }
+                    TargetRegister16::SP => self.stack_pointer = register,
+                }
+
+                self.program_counter.wrapping_add(1)
+            }
         }
     }
 
