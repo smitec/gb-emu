@@ -129,7 +129,7 @@ impl Cpu {
                 let register: &mut u8 = self.register_reference(target);
                 *register = value;
 
-                todo!() // PC increment
+                self.program_counter.wrapping_add(2)
             }
             Instruction::ShiftRight(target, mode, with_carry) => {
                 let original: u8 = self.register_value(target);
@@ -158,7 +158,7 @@ impl Cpu {
                 let register: &mut u8 = self.register_reference(target);
                 *register = value;
 
-                todo!() // PC increment
+                self.program_counter.wrapping_add(2)
             }
             Instruction::BinaryOp(target, op) => {
                 let value: u8 = self.register_value(target);
@@ -223,6 +223,20 @@ impl Cpu {
                     LoadByteSource::HLI => self.memory.read_byte(self.registers.get_hl()) as u16,
                     LoadByteSource::BCI => self.memory.read_byte(self.registers.get_bc()) as u16,
                     LoadByteSource::DEI => self.memory.read_byte(self.registers.get_de()) as u16,
+                    LoadByteSource::HLADD => {
+                        let val = self.memory.read_byte(self.registers.get_hl()) as u16;
+                        let hl_new = self.registers.get_hl().wrapping_add(1);
+                        self.registers.h = ((hl_new & 0xF0) >> 8) as u8;
+                        self.registers.l = (hl_new & 0x0F) as u8;
+                        val
+                    }
+                    LoadByteSource::HLDEC => {
+                        let val = self.memory.read_byte(self.registers.get_hl()) as u16;
+                        let hl_new = self.registers.get_hl().wrapping_sub(1);
+                        self.registers.h = ((hl_new & 0xF0) >> 8) as u8;
+                        self.registers.l = (hl_new & 0x0F) as u8;
+                        val
+                    }
                 };
 
                 match target {
@@ -263,6 +277,20 @@ impl Cpu {
                     LoadByteTarget::DEI => self
                         .memory
                         .write_byte(self.registers.get_de(), (value & 0x0F) as u8),
+                    LoadByteTarget::HLADD => {
+                        self.memory
+                            .write_byte(self.registers.get_hl(), (value & 0x0F) as u8);
+                        let hl_new = self.registers.get_hl().wrapping_add(1);
+                        self.registers.h = ((hl_new & 0xF0) >> 8) as u8;
+                        self.registers.l = (hl_new & 0x0F) as u8;
+                    }
+                    LoadByteTarget::HLDEC => {
+                        self.memory
+                            .write_byte(self.registers.get_hl(), (value & 0x0F) as u8);
+                        let hl_new = self.registers.get_hl().wrapping_sub(1);
+                        self.registers.h = ((hl_new & 0xF0) >> 8) as u8;
+                        self.registers.l = (hl_new & 0x0F) as u8;
+                    }
                 };
 
                 let source_add = match source {
@@ -406,6 +434,7 @@ impl Cpu {
 
                 self.program_counter.wrapping_add(1)
             }
+            Instruction::Stop => todo!(),
         }
     }
 
