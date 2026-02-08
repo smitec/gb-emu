@@ -1,4 +1,5 @@
 type WithCarry = bool;
+type ResetAddress = u16;
 
 pub enum Instruction {
     Add(TargetRegister),
@@ -21,6 +22,7 @@ pub enum Instruction {
     Push(StackTarget),
     Pop(StackTarget),
     Call(JumpTest),
+    RST(ResetAddress),
     Return(JumpTest),
     Nop,
     Stop,
@@ -322,7 +324,7 @@ impl Instruction {
             0xC4 => Some(Self::Call(JumpTest::NotZero)),
             0xC5 => Some(Self::Push(StackTarget::BC)),
             0xC6 => Some(Self::Add(TargetRegister::D8)),
-            0xC7 => todo!(), // RST 00H
+            0xC7 => Some(Self::RST(0x00)),
             0xC8 => Some(Self::Return(JumpTest::Zero)),
             0xC9 => Some(Self::Return(JumpTest::Always)),
             0xCA => Some(Self::Jump(JumpTest::Zero)),
@@ -330,7 +332,7 @@ impl Instruction {
             0xCC => Some(Self::Call(JumpTest::Zero)),
             0xCD => Some(Self::Call(JumpTest::Always)),
             0xCE => Some(Self::AddC(TargetRegister::D8)),
-            0xCF => todo!(), // RST 08H
+            0xCF => Some(Self::RST(0x08)),
             0xD0 => Some(Self::Return(JumpTest::NotCarry)),
             0xD1 => Some(Self::Pop(StackTarget::DE)),
             0xD2 => Some(Self::Jump(JumpTest::NotCarry)),
@@ -338,7 +340,7 @@ impl Instruction {
             0xD4 => Some(Self::Call(JumpTest::NotCarry)),
             0xD5 => Some(Self::Push(StackTarget::DE)),
             0xD6 => Some(Self::Sub(TargetRegister::D8)),
-            0xD7 => todo!(), // RST 10H
+            0xD7 => Some(Self::RST(0x10)),
             0xD8 => Some(Self::Return(JumpTest::Carry)),
             0xD9 => todo!(), // RETI
             0xDA => Some(Self::Jump(JumpTest::Carry)),
@@ -346,7 +348,7 @@ impl Instruction {
             0xDC => Some(Self::Call(JumpTest::Carry)),
             0xDD => None,
             0xDE => Some(Self::SubC(TargetRegister::D8)),
-            0xDF => todo!(), // RST 18H
+            0xDF => Some(Self::RST(0x18)),
             0xE0 => todo!(), // LDH (a8),A
             0xE1 => Some(Self::Pop(StackTarget::HL)),
             0xE2 => todo!(), // LD (C), A
@@ -354,7 +356,7 @@ impl Instruction {
             0xE4 => None,
             0xE5 => Some(Self::Push(StackTarget::HL)),
             0xE6 => Some(Self::BinaryOp(TargetRegister::D8, BinaryOp::AND)),
-            0xE7 => todo!(), // RST 20H
+            0xE7 => Some(Self::RST(0x20)),
             0xE8 => todo!(), // ADD SP, R8 (2, 16)
             0xE9 => todo!(), // JP (HL)
             0xEA => todo!(), // LD (a16),A
@@ -362,7 +364,7 @@ impl Instruction {
             0xEC => None,
             0xED => None,
             0xEE => Some(Self::BinaryOp(TargetRegister::D8, BinaryOp::XOR)),
-            0xEF => todo!(), // RST 28H
+            0xEF => Some(Self::RST(0x28)),
             0xF0 => todo!(), // LD A,(a8)
             0xF1 => Some(Self::Pop(StackTarget::AF)),
             0xF2 => todo!(), // LD A,(C)
@@ -370,7 +372,7 @@ impl Instruction {
             0xF4 => None,
             0xF5 => Some(Self::Push(StackTarget::AF)),
             0xF6 => Some(Self::BinaryOp(TargetRegister::D8, BinaryOp::OR)),
-            0xF7 => todo!(), // RST 30H
+            0xF7 => Some(Self::RST(0x30)),
             0xF8 => todo!(), // LD HL,SP+r8
             0xF9 => todo!(), // LD SP,HL
             0xFA => todo!(), // LD A,(a16)
@@ -378,7 +380,7 @@ impl Instruction {
             0xFC => None,
             0xFD => None,
             0xFE => Some(Self::Compare(TargetRegister::D8)),
-            0xFF => todo!(), // RST 38H
+            0xFF => Some(Self::RST(0x38)),
         }
     }
 }

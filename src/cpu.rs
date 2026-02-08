@@ -110,7 +110,6 @@ impl Cpu {
                 let (mut value, carry) = rot_left(original);
 
                 match mode {
-                    ShiftMode::Logical => {}
                     ShiftMode::Rolling => {
                         if with_carry {
                             value |= original_carry;
@@ -118,7 +117,7 @@ impl Cpu {
                             value |= carry;
                         }
                     }
-                    ShiftMode::Arithmetic => {}
+                    _ => {}
                 };
 
                 self.registers.f.zero = value == 0;
@@ -137,7 +136,6 @@ impl Cpu {
                 let (mut value, carry) = rot_right(original);
 
                 match mode {
-                    ShiftMode::Logical => {}
                     ShiftMode::Rolling => {
                         if with_carry {
                             value |= original_carry << 7;
@@ -148,6 +146,7 @@ impl Cpu {
                     ShiftMode::Arithmetic => {
                         value |= original & 0b10000000;
                     }
+                    _ => {}
                 };
 
                 self.registers.f.zero = value == 0;
@@ -336,6 +335,11 @@ impl Cpu {
                 };
                 self.fn_call(condition)
             }
+            Instruction::RST(reset_address) => {
+                let new_address: u16 = reset_address;
+                self.stack_push(new_address.wrapping_add(1));
+                new_address
+            }
             Instruction::Return(test) => {
                 let condition: bool = match test {
                     JumpTest::NotZero => !self.registers.f.zero,
@@ -469,7 +473,8 @@ impl Cpu {
     fn fn_call(&mut self, should_jump: bool) -> u16 {
         let next_program_counter = self.program_counter.wrapping_add(3);
         if should_jump {
-            self.stack_push(next_program_counter);
+            self.stack_push(next_program_counter); //TODO: Does the RST version work differently
+                                                   //here
             self.memory.read_word(self.program_counter + 1)
         } else {
             next_program_counter
