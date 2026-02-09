@@ -3,6 +3,7 @@ type ResetAddress = u16;
 
 pub enum Instruction {
     Add(TargetRegister),
+    Add16(TargetRegister16),
     AddC(TargetRegister),
     Sub(TargetRegister),
     SubC(TargetRegister),
@@ -19,11 +20,20 @@ pub enum Instruction {
     Swap(TargetRegister),
     LoadByte(LoadByteTarget, LoadByteSource),
     Jump(JumpTest),
+    JumpRelative(JumpTest),
     Push(StackTarget),
     Pop(StackTarget),
     Call(JumpTest),
     RST(ResetAddress),
     Return(JumpTest),
+    JumpToHL,
+    ReturnEnableInterrupt,
+    EnableInterrupt,
+    DisableInterrupt,
+    DecimalAdjustAccumulator,
+    ComplimentAccumulator,
+    SetCarry,
+    ComplimentCarry,
     Nop,
     Stop,
     Halt,
@@ -36,6 +46,17 @@ pub enum JumpTest {
     NotCarry,
     Carry,
     Always,
+}
+
+fn extract_jump_test(byte: u8) -> JumpTest {
+    let target = (byte & 0b00011000) >> 3;
+    match target {
+        0 => JumpTest::NotZero,
+        1 => JumpTest::Zero,
+        2 => JumpTest::NotCarry,
+        3 => JumpTest::Carry,
+        _ => panic!("Impossible Destination Rgister"),
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -95,7 +116,7 @@ fn extract_target_register_r16(byte: u8) -> TargetRegister16 {
         1 => TargetRegister16::DE,
         2 => TargetRegister16::HL,
         3 => TargetRegister16::SP,
-        _ => panic!("Impossible Destination Rgister"),
+        _ => panic!("Impossible Destination Register"),
     }
 }
 
@@ -107,6 +128,18 @@ pub enum StackTarget {
     AF,
 }
 
+fn extract_stack_target(byte: u8) -> StackTarget {
+    let target = (byte & 0b00110000) >> 4;
+    match target {
+        0 => StackTarget::BC,
+        1 => StackTarget::DE,
+        2 => StackTarget::HL,
+        3 => StackTarget::AF,
+        _ => panic!("Impossible Stack Target"),
+    }
+}
+
+// TODO: Merge with LoadByteSource and normalise the termilogoy A16 D16 etc
 #[derive(Clone, Copy)]
 pub enum LoadByteTarget {
     A,
@@ -126,6 +159,8 @@ pub enum LoadByteTarget {
     HLI, // Load from the address HL
     BCI, // Load from the address BC
     DEI, // Load from the address DE
+    R8High,
+    CHigh,
 }
 
 fn extract_dest_register_r8(byte: u8) -> LoadByteTarget {
@@ -139,7 +174,7 @@ fn extract_dest_register_r8(byte: u8) -> LoadByteTarget {
         5 => LoadByteTarget::L,
         6 => LoadByteTarget::HLI,
         7 => LoadByteTarget::A,
-        _ => panic!("Impossible Destination Rgister"),
+        _ => panic!("Impossible Destination Register"),
     }
 }
 
@@ -150,7 +185,7 @@ fn extract_dest_r16(byte: u8) -> LoadByteTarget {
         1 => LoadByteTarget::DE,
         2 => LoadByteTarget::HL,
         3 => LoadByteTarget::SP,
-        _ => panic!("Impossible Destination Rgister"),
+        _ => panic!("Impossible Destination Register"),
     }
 }
 
@@ -161,7 +196,7 @@ fn extract_dest_r16_memory(byte: u8) -> LoadByteTarget {
         1 => LoadByteTarget::DEI,
         2 => LoadByteTarget::HLADD,
         3 => LoadByteTarget::HLDEC,
-        _ => panic!("Impossible Destination Rgister"),
+        _ => panic!("Impossible Destination Register"),
     }
 }
 
@@ -182,6 +217,8 @@ pub enum LoadByteSource {
     HLDEC,
     BCI, // BC Immediate
     DEI, // DE Immediate
+    R8High,
+    CHigh,
 }
 
 fn extract_source_register_r8(byte: u8) -> LoadByteSource {
@@ -195,7 +232,7 @@ fn extract_source_register_r8(byte: u8) -> LoadByteSource {
         5 => LoadByteSource::L,
         6 => LoadByteSource::HLI,
         7 => LoadByteSource::A,
-        _ => panic!("Impossible Destination Rgister"),
+        _ => panic!("Impossible Destination Register"),
     }
 }
 
@@ -206,7 +243,7 @@ fn extract_source_r16_memory(byte: u8) -> LoadByteSource {
         1 => LoadByteSource::DEI,
         2 => LoadByteSource::HLADD,
         3 => LoadByteSource::HLDEC,
-        _ => panic!("Impossible Destination Rgister"),
+        _ => panic!("Impossible Destination Register"),
     }
 }
 
@@ -228,6 +265,9 @@ impl Instruction {
 
     fn from_byte_not_prefixed(byte: u8) -> Option<Instruction> {
         match byte {
+            0xD3 | 0xDB | 0xDD | 0xE3 | 0xE4 | 0xEB | 0xEC | 0xED | 0xF4 | 0xFC | 0xFD => None,
+            0xCB => None, // Handled by the prefix Check
+
             0x00 => Some(Self::Nop),
 
             0x01 | 0x11 | 0x21 | 0x31 => {
@@ -257,7 +297,7 @@ impl Instruction {
 
             0x08 => Some(Self::LoadByte(LoadByteTarget::A16, LoadByteSource::SP)),
 
-            0x09 | 0x19 | 0x29 | 0x39 => todo!(), // ADD HL, r16 (1,8)
+            0x09 | 0x19 | 0x29 | 0x39 => Some(Self::Add16(extract_target_register_r16(byte))),
 
             0x0A | 0x1A | 0x2A | 0x3A => Some(Self::LoadByte(
                 LoadByteTarget::A,
@@ -278,27 +318,26 @@ impl Instruction {
                 ShiftMode::Arithmetic,
                 true,
             )),
-            0x18 => todo!(), // JR r8 (2, 12)
+            0x18 => Some(Self::JumpRelative(JumpTest::Always)),
+            0x20 | 0x28 | 0x30 | 0x38 => Some(Self::JumpRelative(extract_jump_test(byte))),
+
             0x1F => Some(Self::ShiftRight(
                 TargetRegister::A,
                 ShiftMode::Arithmetic,
                 true,
             )),
-            0x20 => todo!(), // JR NZ, r8 (2, 12/8)
-            0x27 => todo!(), // DAA (1 4)
-            0x28 => todo!(), // JR Z r8 (2, 12)
-            0x2F => todo!(), // CPL (1, 4)
-            0x30 => todo!(), // JR NC, r8 (2, 12/8)
-            0x37 => todo!(), // SCF (1 4)
-            0x38 => todo!(), // JR C r8 (2, 12)
-            0x3F => todo!(), // CCF (1, 4)
+
+            0x27 => Some(Self::DecimalAdjustAccumulator), // DAA (1 4)
+            0x2F => Some(Self::ComplimentAccumulator),
+            0x37 => Some(Self::SetCarry),
+            0x3F => Some(Self::ComplimentCarry),
 
             0x40..=0x75 | 0x77..=0x7F => Some(Self::LoadByte(
                 extract_dest_register_r8(byte),
                 extract_source_register_r8(byte),
             )),
 
-            0x76 => todo!(), // HALT
+            0x76 => Some(Self::Halt),
             0x80..=0x87 => Some(Self::Add(extract_target_register_r8(byte << 3))),
             0x88..=0x8F => Some(Self::AddC(extract_target_register_r8(byte << 3))),
             0x90..=0x97 => Some(Self::Sub(extract_target_register_r8(byte << 3))),
@@ -317,70 +356,51 @@ impl Instruction {
             )),
             0xB8..=0xBF => Some(Self::Compare(extract_target_register_r8(byte << 3))),
 
-            0xC0 => Some(Self::Return(JumpTest::NotZero)),
-            0xC1 => Some(Self::Pop(StackTarget::BC)),
-            0xC2 => Some(Self::Jump(JumpTest::NotZero)),
-            0xC3 => Some(Self::Jump(JumpTest::Always)),
-            0xC4 => Some(Self::Call(JumpTest::NotZero)),
-            0xC5 => Some(Self::Push(StackTarget::BC)),
             0xC6 => Some(Self::Add(TargetRegister::D8)),
-            0xC7 => Some(Self::RST(0x00)),
-            0xC8 => Some(Self::Return(JumpTest::Zero)),
-            0xC9 => Some(Self::Return(JumpTest::Always)),
-            0xCA => Some(Self::Jump(JumpTest::Zero)),
-            0xCB => None, // Handled by the prefix Check
-            0xCC => Some(Self::Call(JumpTest::Zero)),
-            0xCD => Some(Self::Call(JumpTest::Always)),
             0xCE => Some(Self::AddC(TargetRegister::D8)),
-            0xCF => Some(Self::RST(0x08)),
-            0xD0 => Some(Self::Return(JumpTest::NotCarry)),
-            0xD1 => Some(Self::Pop(StackTarget::DE)),
-            0xD2 => Some(Self::Jump(JumpTest::NotCarry)),
-            0xD3 => None,
-            0xD4 => Some(Self::Call(JumpTest::NotCarry)),
-            0xD5 => Some(Self::Push(StackTarget::DE)),
             0xD6 => Some(Self::Sub(TargetRegister::D8)),
-            0xD7 => Some(Self::RST(0x10)),
-            0xD8 => Some(Self::Return(JumpTest::Carry)),
-            0xD9 => todo!(), // RETI
-            0xDA => Some(Self::Jump(JumpTest::Carry)),
-            0xDB => None,
-            0xDC => Some(Self::Call(JumpTest::Carry)),
-            0xDD => None,
             0xDE => Some(Self::SubC(TargetRegister::D8)),
-            0xDF => Some(Self::RST(0x18)),
-            0xE0 => todo!(), // LDH (a8),A
-            0xE1 => Some(Self::Pop(StackTarget::HL)),
-            0xE2 => todo!(), // LD (C), A
-            0xE3 => None,
-            0xE4 => None,
-            0xE5 => Some(Self::Push(StackTarget::HL)),
             0xE6 => Some(Self::BinaryOp(TargetRegister::D8, BinaryOp::AND)),
-            0xE7 => Some(Self::RST(0x20)),
-            0xE8 => todo!(), // ADD SP, R8 (2, 16)
-            0xE9 => todo!(), // JP (HL)
-            0xEA => todo!(), // LD (a16),A
-            0xEB => None,
-            0xEC => None,
-            0xED => None,
             0xEE => Some(Self::BinaryOp(TargetRegister::D8, BinaryOp::XOR)),
-            0xEF => Some(Self::RST(0x28)),
-            0xF0 => todo!(), // LD A,(a8)
-            0xF1 => Some(Self::Pop(StackTarget::AF)),
-            0xF2 => todo!(), // LD A,(C)
-            0xF3 => todo!(), // DI
-            0xF4 => None,
-            0xF5 => Some(Self::Push(StackTarget::AF)),
             0xF6 => Some(Self::BinaryOp(TargetRegister::D8, BinaryOp::OR)),
+            0xFE => Some(Self::Compare(TargetRegister::D8)),
+
+            0xC9 => Some(Self::Return(JumpTest::Always)),
+            0xC0 | 0xC8 | 0xD0 | 0xD8 => Some(Self::Return(extract_jump_test(byte))),
+            0xD9 => Some(Self::ReturnEnableInterrupt),
+
+            0xC3 => Some(Self::Jump(JumpTest::Always)),
+            0xC2 | 0xCA | 0xD2 | 0xDA => Some(Self::Jump(extract_jump_test(byte))),
+            0xE9 => Some(Self::JumpToHL),
+
+            0xCD => Some(Self::Call(JumpTest::Always)),
+            0xC4 | 0xCC | 0xD4 | 0xDC => Some(Self::Call(JumpTest::NotZero)),
+
+            0xC1 | 0xD1 | 0xE1 | 0xF1 => Some(Self::Pop(extract_stack_target(byte))),
+            0xC5 | 0xD5 | 0xE5 | 0xF5 => Some(Self::Push(extract_stack_target(byte))),
+
+            0xC7 => Some(Self::RST(0x00)),
+            0xCF => Some(Self::RST(0x08)),
+            0xD7 => Some(Self::RST(0x10)),
+            0xDF => Some(Self::RST(0x18)),
+            0xE7 => Some(Self::RST(0x20)),
+            0xEF => Some(Self::RST(0x28)),
             0xF7 => Some(Self::RST(0x30)),
+            0xFF => Some(Self::RST(0x38)),
+
+            0xF3 => Some(Self::DisableInterrupt),
+            0xFB => Some(Self::EnableInterrupt),
+
+            0xE0 => Some(Self::LoadByte(LoadByteTarget::R8High, LoadByteSource::A)),
+            0xE2 => Some(Self::LoadByte(LoadByteTarget::CHigh, LoadByteSource::A)),
+            0xEA => Some(Self::LoadByte(LoadByteTarget::A16, LoadByteSource::A)),
+            0xF0 => Some(Self::LoadByte(LoadByteTarget::A, LoadByteSource::R8High)),
+            0xF2 => Some(Self::LoadByte(LoadByteTarget::A, LoadByteSource::CHigh)),
+            0xFA => Some(Self::LoadByte(LoadByteTarget::A, LoadByteSource::D16)),
+
+            0xE8 => todo!(), // ADD SP, R8 (2, 16)
             0xF8 => todo!(), // LD HL,SP+r8
             0xF9 => todo!(), // LD SP,HL
-            0xFA => todo!(), // LD A,(a16)
-            0xFB => todo!(), // EI
-            0xFC => None,
-            0xFD => None,
-            0xFE => Some(Self::Compare(TargetRegister::D8)),
-            0xFF => Some(Self::RST(0x38)),
         }
     }
 }

@@ -473,8 +473,7 @@ impl Cpu {
     fn fn_call(&mut self, should_jump: bool) -> u16 {
         let next_program_counter = self.program_counter.wrapping_add(3);
         if should_jump {
-            self.stack_push(next_program_counter); //TODO: Does the RST version work differently
-                                                   //here
+            self.stack_push(next_program_counter);
             self.memory.read_word(self.program_counter + 1)
         } else {
             next_program_counter
