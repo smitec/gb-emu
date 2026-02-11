@@ -27,6 +27,7 @@ impl Cpu {
         let prefixed = instruction == 0xCB;
         if prefixed {
             instruction = self.memory.read_byte(self.program_counter + 1);
+            self.program_counter += 1;
         }
         let next_program_counter =
             if let Some(instruction) = Instruction::from_byte(instruction, prefixed) {
@@ -236,6 +237,13 @@ impl Cpu {
                         self.registers.l = (hl_new & 0x0F) as u8;
                         val
                     }
+                    LoadByteSource::R8High => self
+                        .memory
+                        .read_byte(0xF0 & (self.memory.read_byte(self.program_counter + 1) as u16))
+                        as u16,
+                    LoadByteSource::CHigh => {
+                        self.memory.read_byte(0xF0 & (self.registers.c as u16)) as u16
+                    }
                 };
 
                 match target {
@@ -439,6 +447,101 @@ impl Cpu {
                 self.program_counter.wrapping_add(1)
             }
             Instruction::Stop => todo!(),
+            Instruction::Add16(target_register16) => {
+                let value = match target_register16 {
+                    TargetRegister16::BC => self.registers.get_bc(),
+                    TargetRegister16::DE => self.registers.get_de(),
+                    TargetRegister16::HL => self.registers.get_hl(),
+                    TargetRegister16::SP => self.stack_pointer,
+                };
+
+                let old = self.registers.get_hl();
+
+                let (new_v, overflow) = old.overflowing_add(value);
+                self.registers.f.carry = overflow;
+                self.registers.f.half_carry = (old & 0x0F00) + (value & 0x0F00) > 0x0F00;
+                self.registers.f.zero = false;
+                self.registers.f.subtract = false;
+
+                self.registers.h = ((new_v & 0xF0) >> 8) as u8;
+                self.registers.l = (new_v & 0x0F) as u8;
+
+                self.program_counter.wrapping_add(1)
+            }
+            Instruction::Bit(bit, target_register) => {
+                self.registers.f.zero = (self.register_value(target_register) & (0b1 << bit)) == 0;
+                self.program_counter.wrapping_add(1)
+            }
+            Instruction::JumpRelative(jump_test) => todo!(),
+            Instruction::JumpToHL => {
+                self.program_counter = self.registers.get_hl();
+                self.program_counter
+            }
+            Instruction::ReturnEnableInterrupt => todo!(),
+            Instruction::EnableInterrupt => todo!(),
+            Instruction::DisableInterrupt => todo!(),
+            Instruction::DecimalAdjustAccumulator => todo!(),
+            Instruction::ComplimentAccumulator => todo!(),
+            Instruction::SetCarry => {
+                self.registers.f.carry = true;
+                self.registers.f.half_carry = false;
+                self.registers.f.subtract = false;
+                self.program_counter.wrapping_add(1)
+            }
+            Instruction::ComplimentCarry => {
+                self.registers.f.carry = !self.registers.f.carry;
+                self.registers.f.half_carry = false;
+                self.registers.f.subtract = false;
+                self.program_counter.wrapping_add(1)
+            }
+            Instruction::AddStackPointerR8 => {
+                let add: i8 = self.register_value(TargetRegister::D8) as i8;
+                let old = (self.stack_pointer & 0x0F) as u8;
+
+                if add >= 0 {
+                    self.stack_pointer = self.stack_pointer.wrapping_add(add as u16);
+                } else {
+                    self.stack_pointer = self.stack_pointer.wrapping_sub(add.abs() as u16);
+                }
+
+                // TODO: What about sub? Can't that carry or cook things?
+
+                let (new_v, overflow) = old.overflowing_add(add as u8);
+                self.registers.f.carry = overflow;
+                self.registers.f.half_carry = (old & 0xF) + (add as u8 & 0xF) > 0xF;
+                self.registers.f.zero = false;
+                self.registers.f.subtract = false;
+
+                self.program_counter.wrapping_add(2)
+            }
+            Instruction::LoadHLStackPointerR8 => {
+                let add: i8 = self.register_value(TargetRegister::D8) as i8;
+                let old = (self.stack_pointer & 0x0F) as u8;
+
+                let new;
+                if add >= 0 {
+                    new = self.stack_pointer.wrapping_add(add as u16);
+                } else {
+                    new = self.stack_pointer.wrapping_sub(add.abs() as u16);
+                }
+
+                self.registers.h = ((new & 0xF0) >> 8) as u8;
+                self.registers.l = (new & 0x0F) as u8;
+
+                // TODO: What about sub? Can't that carry or cook things?
+
+                let (new_v, overflow) = old.overflowing_add(add as u8);
+                self.registers.f.carry = overflow;
+                self.registers.f.half_carry = (old & 0xF) + (add as u8 & 0xF) > 0xF;
+                self.registers.f.zero = false;
+                self.registers.f.subtract = false;
+
+                self.program_counter.wrapping_add(2)
+            }
+            Instruction::LoadStackPointerHL => {
+                self.stack_pointer = self.registers.get_hl();
+                self.program_counter.wrapping_add(1)
+            }
         }
     }
 
