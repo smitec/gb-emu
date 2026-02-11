@@ -5,6 +5,7 @@ pub enum Instruction {
     Add(TargetRegister),
     Add16(TargetRegister16),
     AddC(TargetRegister),
+    Bit(u8, TargetRegister),
     Sub(TargetRegister),
     SubC(TargetRegister),
     Compare(TargetRegister),
@@ -34,6 +35,9 @@ pub enum Instruction {
     ComplimentAccumulator,
     SetCarry,
     ComplimentCarry,
+    AddStackPointerR8,
+    LoadHLStackPointerR8,
+    LoadStackPointerHL,
     Nop,
     Stop,
     Halt,
@@ -258,8 +262,54 @@ impl Instruction {
 
     fn from_byte_prefixed(byte: u8) -> Option<Instruction> {
         match byte {
-            0x00 => todo!(),
-            _ => todo!(),
+            0x00..=0x07 => Some(Self::ShiftLeft(
+                extract_target_register_r8(byte),
+                ShiftMode::Rolling,
+                true,
+            )),
+            0x08..=0x0F => Some(Self::ShiftRight(
+                extract_target_register_r8(byte),
+                ShiftMode::Rolling,
+                true,
+            )),
+            0x10..=0x17 => Some(Self::ShiftLeft(
+                extract_target_register_r8(byte),
+                ShiftMode::Rolling,
+                false,
+            )),
+            0x18..=0x1F => Some(Self::ShiftRight(
+                extract_target_register_r8(byte),
+                ShiftMode::Rolling,
+                false,
+            )),
+            0x20..=0x27 => Some(Self::ShiftLeft(
+                extract_target_register_r8(byte),
+                ShiftMode::Arithmetic,
+                false,
+            )),
+            0x28..=0x2F => Some(Self::ShiftRight(
+                extract_target_register_r8(byte),
+                ShiftMode::Arithmetic,
+                false,
+            )),
+            0x30..=0x37 => Some(Self::Swap(extract_target_register_r8(byte))),
+            0x38..=0x3F => Some(Self::ShiftRight(
+                extract_target_register_r8(byte),
+                ShiftMode::Logical,
+                false,
+            )),
+            0x40..=0x7F => Some(Self::Bit(
+                (byte & 0b00111000) >> 3,
+                extract_target_register_r8(byte),
+            )),
+            0x80..=0xBF => Some(Self::Reset(
+                extract_target_register_r8(byte),
+                (byte & 0b00111000) >> 3,
+            )),
+            0xC0..=0xFF => Some(Self::Set(
+                extract_target_register_r8(byte),
+                (byte & 0b00111000) >> 3,
+            )),
         }
     }
 
@@ -398,9 +448,9 @@ impl Instruction {
             0xF2 => Some(Self::LoadByte(LoadByteTarget::A, LoadByteSource::CHigh)),
             0xFA => Some(Self::LoadByte(LoadByteTarget::A, LoadByteSource::D16)),
 
-            0xE8 => todo!(), // ADD SP, R8 (2, 16)
-            0xF8 => todo!(), // LD HL,SP+r8
-            0xF9 => todo!(), // LD SP,HL
+            0xE8 => Some(Self::AddStackPointerR8),
+            0xF8 => Some(Self::LoadHLStackPointerR8),
+            0xF9 => Some(Self::LoadStackPointerHL),
         }
     }
 }
