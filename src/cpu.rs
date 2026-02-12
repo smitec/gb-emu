@@ -3,12 +3,20 @@ use crate::instructions::*;
 use crate::memory::*;
 use crate::registers::*;
 
+enum InterruptState {
+    Enabled,
+    Disabled,
+    Pending,
+    Next,
+}
+
 pub struct Cpu {
     registers: Registers,
     program_counter: u16,
     stack_pointer: u16,
     memory: Memory,
     halted: bool,
+    interrupts: InterruptState,
 }
 
 impl Cpu {
@@ -19,24 +27,42 @@ impl Cpu {
             stack_pointer: 0,
             memory: Memory::new(),
             halted: false,
+            interrupts: InterruptState::Disabled,
         }
     }
 
     pub fn step(&mut self) {
-        let mut instruction = self.memory.read_byte(self.program_counter);
-        let prefixed = instruction == 0xCB;
-        if prefixed {
-            instruction = self.memory.read_byte(self.program_counter + 1);
-            self.program_counter += 1;
-        }
-        let next_program_counter =
-            if let Some(instruction) = Instruction::from_byte(instruction, prefixed) {
-                self.execute(instruction)
-            } else {
-                panic!("Invalid instruction found for 0x{:x}", instruction);
-            };
+        let pending_interrupts = self.memory.read_byte(0xFF0F);
+        if matches!(self.interrupts, InterruptState::Enabled) && pending_interrupts > 0 {
+            // TODO: Handle the interrupts
+            // Turn off Interrupts
+            // Find the correct interrupt according to priority
+            // NOP Twice
+            // Push the PC to the stack
+            // Set the PC to the Interrupt Address Handler
+            // Continue
+        } else {
+            let mut instruction = self.memory.read_byte(self.program_counter);
+            let prefixed = instruction == 0xCB;
+            if prefixed {
+                instruction = self.memory.read_byte(self.program_counter + 1);
+                self.program_counter += 1;
+            }
+            let next_program_counter =
+                if let Some(instruction) = Instruction::from_byte(instruction, prefixed) {
+                    self.execute(instruction)
+                } else {
+                    panic!("Invalid instruction found for 0x{:x}", instruction);
+                };
 
-        self.program_counter = next_program_counter;
+            self.program_counter = next_program_counter;
+
+            match self.interrupts {
+                InterruptState::Pending => self.interrupts = InterruptState::Next,
+                InterruptState::Next => self.interrupts = InterruptState::Enabled,
+                _ => {}
+            }
+        }
     }
 
     fn execute(&mut self, intstruction: Instruction) -> u16 {
@@ -298,6 +324,16 @@ impl Cpu {
                         self.registers.h = ((hl_new & 0xF0) >> 8) as u8;
                         self.registers.l = (hl_new & 0x0F) as u8;
                     }
+                    LoadByteTarget::R8High => {
+                        self.memory.write_byte(
+                            0xF0 & (self.memory.read_byte(self.program_counter + 1) as u16),
+                            value as u8,
+                        );
+                    }
+                    LoadByteTarget::CHigh => {
+                        self.memory
+                            .write_byte(0xF0 & (self.registers.c as u16), value as u8);
+                    }
                 };
 
                 let source_add = match source {
@@ -361,7 +397,7 @@ impl Cpu {
             Instruction::Nop => self.program_counter.wrapping_add(1),
             Instruction::Halt => {
                 self.halted = true;
-                self.program_counter.wrapping_add(2)
+                self.program_counter.wrapping_add(1)
             }
             Instruction::Compare(target) => {
                 let value: u8 = self.register_value(target);
@@ -472,16 +508,78 @@ impl Cpu {
                 self.registers.f.zero = (self.register_value(target_register) & (0b1 << bit)) == 0;
                 self.program_counter.wrapping_add(1)
             }
-            Instruction::JumpRelative(jump_test) => todo!(),
+            Instruction::JumpRelative(jump_test) => {
+                let should_jump: bool = match jump_test {
+                    JumpTest::NotZero => !self.registers.f.zero,
+                    JumpTest::Zero => self.registers.f.zero,
+                    JumpTest::NotCarry => !self.registers.f.carry,
+                    JumpTest::Carry => self.registers.f.carry,
+                    JumpTest::Always => true,
+                };
+
+                if should_jump {
+                    // Get the (Little Endian) address to jump to
+                    let lsb = self.memory.read_byte(self.program_counter + 1) as i8;
+                    if lsb >= 0 {
+                        self.program_counter.wrapping_add(1 + lsb.abs() as u16)
+                    } else {
+                        self.program_counter.wrapping_sub(lsb.abs() as u16 - 1)
+                    }
+                } else {
+                    // Jump over the two bytes specifying the jump location
+                    self.program_counter.wrapping_add(2)
+                }
+            }
             Instruction::JumpToHL => {
                 self.program_counter = self.registers.get_hl();
                 self.program_counter
             }
-            Instruction::ReturnEnableInterrupt => todo!(),
-            Instruction::EnableInterrupt => todo!(),
-            Instruction::DisableInterrupt => todo!(),
-            Instruction::DecimalAdjustAccumulator => todo!(),
-            Instruction::ComplimentAccumulator => todo!(),
+            Instruction::ReturnEnableInterrupt => {
+                self.interrupts = InterruptState::Pending;
+                self.fn_return(true)
+            }
+            Instruction::EnableInterrupt => {
+                self.interrupts = InterruptState::Pending;
+                self.program_counter.wrapping_add(1)
+            }
+            Instruction::DisableInterrupt => {
+                self.interrupts = InterruptState::Disabled;
+                self.program_counter.wrapping_add(1)
+            }
+            Instruction::DecimalAdjustAccumulator => {
+                if self.registers.f.subtract {
+                    let mut adjustment = 0;
+                    adjustment += if self.registers.f.half_carry { 0x06 } else { 0 };
+                    adjustment += if self.registers.f.carry { 0x60 } else { 0 };
+                    self.registers.a = self.registers.a.wrapping_sub(adjustment);
+                    self.registers.f.zero = self.registers.a == 0;
+                    self.registers.f.half_carry = false;
+                } else {
+                    let mut adjustment = 0;
+                    adjustment += if (self.registers.f.half_carry || self.registers.a > 0x09) {
+                        0x06
+                    } else {
+                        0
+                    };
+                    adjustment += if self.registers.f.carry {
+                        self.registers.f.carry = true;
+                        0x60
+                    } else {
+                        0
+                    };
+                    self.registers.a = self.registers.a.wrapping_add(adjustment);
+                    self.registers.f.zero = self.registers.a == 0;
+                    self.registers.f.half_carry = false;
+                }
+
+                self.program_counter.wrapping_add(1)
+            }
+            Instruction::ComplimentAccumulator => {
+                self.registers.a = !self.registers.a;
+                self.registers.f.subtract = true;
+                self.registers.f.half_carry = true;
+                self.program_counter.wrapping_add(1)
+            }
             Instruction::SetCarry => {
                 self.registers.f.carry = true;
                 self.registers.f.half_carry = false;
@@ -506,7 +604,7 @@ impl Cpu {
 
                 // TODO: What about sub? Can't that carry or cook things?
 
-                let (new_v, overflow) = old.overflowing_add(add as u8);
+                let (_, overflow) = old.overflowing_add(add as u8);
                 self.registers.f.carry = overflow;
                 self.registers.f.half_carry = (old & 0xF) + (add as u8 & 0xF) > 0xF;
                 self.registers.f.zero = false;
@@ -530,7 +628,7 @@ impl Cpu {
 
                 // TODO: What about sub? Can't that carry or cook things?
 
-                let (new_v, overflow) = old.overflowing_add(add as u8);
+                let (_, overflow) = old.overflowing_add(add as u8);
                 self.registers.f.carry = overflow;
                 self.registers.f.half_carry = (old & 0xF) + (add as u8 & 0xF) > 0xF;
                 self.registers.f.zero = false;
