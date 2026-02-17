@@ -36,8 +36,7 @@ impl Cpu {
         if matches!(self.interrupts, InterruptState::Enabled) && pending_interrupts > 0 {
             // Find the correct interrupt according to priority
             let interrupt_enabled: u8 = self.memory.read_byte(0xFFFF);
-            let interrupt_flags: u8 = self.memory.read_byte(0xFF0F);
-            let val = interrupt_enabled & interrupt_flags;
+            let val = interrupt_enabled & pending_interrupts;
             // NOP Twice or increment the cycles accordingly
             // Set the PC to the Interrupt Address Handler
             let mut new_address: Option<u16> = None;
@@ -60,6 +59,7 @@ impl Cpu {
 
             if let Some(address) = new_address {
                 // Turn off Interrupts
+                // TODO: set the interrupt flag to 0 to clear it
                 self.interrupts = InterruptState::Disabled;
                 // Push the PC to the stack
                 self.stack_push(self.program_counter);
@@ -266,10 +266,7 @@ impl Cpu {
                     LoadByteSource::H => self.registers.h as u16,
                     LoadByteSource::L => self.registers.l as u16,
                     LoadByteSource::D8 => self.memory.read_byte(self.program_counter + 1) as u16,
-                    LoadByteSource::D16 => {
-                        ((self.memory.read_byte(self.program_counter + 1) as u16) << 8)
-                            + self.memory.read_byte(self.program_counter + 2) as u16
-                    }
+                    LoadByteSource::D16 => self.memory.read_word(self.program_counter + 1),
                     LoadByteSource::SP => self.stack_pointer,
                     LoadByteSource::HLI => self.memory.read_byte(self.registers.get_hl()) as u16,
                     LoadByteSource::BCI => self.memory.read_byte(self.registers.get_bc()) as u16,
@@ -277,15 +274,13 @@ impl Cpu {
                     LoadByteSource::HLADD => {
                         let val = self.memory.read_byte(self.registers.get_hl()) as u16;
                         let hl_new = self.registers.get_hl().wrapping_add(1);
-                        self.registers.h = ((hl_new & 0xF0) >> 8) as u8;
-                        self.registers.l = (hl_new & 0x0F) as u8;
+                        self.registers.set_hl(hl_new);
                         val
                     }
                     LoadByteSource::HLDEC => {
                         let val = self.memory.read_byte(self.registers.get_hl()) as u16;
                         let hl_new = self.registers.get_hl().wrapping_sub(1);
-                        self.registers.h = ((hl_new & 0xF0) >> 8) as u8;
-                        self.registers.l = (hl_new & 0x0F) as u8;
+                        self.registers.set_hl(hl_new);
                         val
                     }
                     LoadByteSource::R8High => self
@@ -305,21 +300,10 @@ impl Cpu {
                     LoadByteTarget::E => self.registers.e = (value & 0x0F) as u8,
                     LoadByteTarget::H => self.registers.h = (value & 0x0F) as u8,
                     LoadByteTarget::L => self.registers.l = (value & 0x0F) as u8,
-                    LoadByteTarget::BC => {
-                        self.registers.b = ((value & 0xF0) >> 8) as u8;
-                        self.registers.c = (value & 0x0F) as u8;
-                    }
-                    LoadByteTarget::DE => {
-                        self.registers.d = ((value & 0xF0) >> 8) as u8;
-                        self.registers.e = (value & 0x0F) as u8;
-                    }
-                    LoadByteTarget::HL => {
-                        self.registers.h = ((value & 0xF0) >> 8) as u8;
-                        self.registers.l = (value & 0x0F) as u8;
-                    }
-                    LoadByteTarget::SP => {
-                        self.stack_pointer = value;
-                    }
+                    LoadByteTarget::BC => self.registers.set_bc(value),
+                    LoadByteTarget::DE => self.registers.set_de(value),
+                    LoadByteTarget::HL => self.registers.set_hl(value),
+                    LoadByteTarget::SP => self.stack_pointer = value,
                     LoadByteTarget::A16 => {
                         self.memory
                             .write_byte(value, ((self.stack_pointer & 0xF0) >> 8) as u8);
@@ -339,15 +323,13 @@ impl Cpu {
                         self.memory
                             .write_byte(self.registers.get_hl(), (value & 0x0F) as u8);
                         let hl_new = self.registers.get_hl().wrapping_add(1);
-                        self.registers.h = ((hl_new & 0xF0) >> 8) as u8;
-                        self.registers.l = (hl_new & 0x0F) as u8;
+                        self.registers.set_hl(hl_new);
                     }
                     LoadByteTarget::HLDEC => {
                         self.memory
                             .write_byte(self.registers.get_hl(), (value & 0x0F) as u8);
                         let hl_new = self.registers.get_hl().wrapping_sub(1);
-                        self.registers.h = ((hl_new & 0xF0) >> 8) as u8;
-                        self.registers.l = (hl_new & 0x0F) as u8;
+                        self.registers.set_hl(hl_new);
                     }
                     LoadByteTarget::R8High => {
                         self.memory.write_byte(
@@ -463,16 +445,13 @@ impl Cpu {
 
                 match target {
                     TargetRegister16::BC => {
-                        self.registers.b = ((register & 0xF0) >> 8) as u8;
-                        self.registers.c = (register & 0x0F) as u8;
+                        self.registers.set_bc(register);
                     }
                     TargetRegister16::DE => {
-                        self.registers.d = ((register & 0xF0) >> 8) as u8;
-                        self.registers.e = (register & 0x0F) as u8;
+                        self.registers.set_de(register);
                     }
                     TargetRegister16::HL => {
-                        self.registers.h = ((register & 0xF0) >> 8) as u8;
-                        self.registers.l = (register & 0x0F) as u8;
+                        self.registers.set_hl(register);
                     }
                     TargetRegister16::SP => self.stack_pointer = register,
                 }
@@ -491,16 +470,13 @@ impl Cpu {
 
                 match target {
                     TargetRegister16::BC => {
-                        self.registers.b = ((register & 0xF0) >> 8) as u8;
-                        self.registers.c = (register & 0x0F) as u8;
+                        self.registers.set_bc(register);
                     }
                     TargetRegister16::DE => {
-                        self.registers.d = ((register & 0xF0) >> 8) as u8;
-                        self.registers.e = (register & 0x0F) as u8;
+                        self.registers.set_de(register);
                     }
                     TargetRegister16::HL => {
-                        self.registers.h = ((register & 0xF0) >> 8) as u8;
-                        self.registers.l = (register & 0x0F) as u8;
+                        self.registers.set_hl(register);
                     }
                     TargetRegister16::SP => self.stack_pointer = register,
                 }
@@ -524,8 +500,7 @@ impl Cpu {
                 self.registers.f.zero = false;
                 self.registers.f.subtract = false;
 
-                self.registers.h = ((new_v & 0xF0) >> 8) as u8;
-                self.registers.l = (new_v & 0x0F) as u8;
+                self.registers.set_hl(new_v);
 
                 self.program_counter.wrapping_add(1)
             }
@@ -648,8 +623,7 @@ impl Cpu {
                     new = self.stack_pointer.wrapping_sub(add.abs() as u16);
                 }
 
-                self.registers.h = ((new & 0xF0) >> 8) as u8;
-                self.registers.l = (new & 0x0F) as u8;
+                self.registers.set_hl(new);
 
                 // TODO: What about sub? Can't that carry or cook things?
 
@@ -737,9 +711,7 @@ impl Cpu {
     fn jump(&self, should_jump: bool) -> u16 {
         if should_jump {
             // Get the (Little Endian) address to jump to
-            let lsb = self.memory.read_byte(self.program_counter + 1) as u16;
-            let msb = self.memory.read_byte(self.program_counter + 2) as u16;
-            (msb << 8) | lsb
+            self.memory.read_word(self.program_counter + 1)
         } else {
             // Jump over the two bytes specifying the jump location
             self.program_counter.wrapping_add(3)
