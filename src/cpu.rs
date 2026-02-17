@@ -34,13 +34,38 @@ impl Cpu {
     pub fn step(&mut self) {
         let pending_interrupts = self.memory.read_byte(0xFF0F);
         if matches!(self.interrupts, InterruptState::Enabled) && pending_interrupts > 0 {
-            // TODO: Handle the interrupts
-            // Turn off Interrupts
             // Find the correct interrupt according to priority
-            // NOP Twice
-            // Push the PC to the stack
+            let interrupt_enabled: u8 = self.memory.read_byte(0xFFFF);
+            let interrupt_flags: u8 = self.memory.read_byte(0xFF0F);
+            let val = interrupt_enabled & interrupt_flags;
+            // NOP Twice or increment the cycles accordingly
             // Set the PC to the Interrupt Address Handler
-            // Continue
+            let mut new_address: Option<u16> = None;
+            if (val & 0b00000001) > 0 {
+                // VBlank
+                new_address = Some(0x0040);
+            } else if (val & 0b00000010) > 0 {
+                // LCD
+                new_address = Some(0x0048);
+            } else if (val & 0b00000100) > 0 {
+                // Timer
+                new_address = Some(0x0050);
+            } else if (val & 0b00001000) > 0 {
+                // Serial
+                new_address = Some(0x0058);
+            } else if (val & 0b00010000) > 0 {
+                // Joypad
+                new_address = Some(0x0060);
+            }
+
+            if let Some(address) = new_address {
+                // Turn off Interrupts
+                self.interrupts = InterruptState::Disabled;
+                // Push the PC to the stack
+                self.stack_push(self.program_counter);
+                // Continue
+                self.program_counter = address;
+            }
         } else {
             let mut instruction = self.memory.read_byte(self.program_counter);
             let prefixed = instruction == 0xCB;
