@@ -568,7 +568,7 @@ impl Cpu {
                     self.registers.f.half_carry = false;
                 } else {
                     let mut adjustment = 0;
-                    adjustment += if (self.registers.f.half_carry || self.registers.a > 0x09) {
+                    adjustment += if self.registers.f.half_carry || self.registers.a > 0x09  {
                         0x06
                     } else {
                         0
