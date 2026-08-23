@@ -24,7 +24,7 @@ impl Cpu {
         Cpu {
             registers: Registers::new(),
             program_counter: 0,
-            stack_pointer: 0,
+            stack_pointer: 0xFFFE,
             memory: Memory::new(),
             halted: false,
             interrupts: InterruptState::Disabled,
@@ -92,7 +92,7 @@ impl Cpu {
 
     fn execute(&mut self, intstruction: Instruction) -> u16 {
         if self.halted {
-            return 0;
+            return self.program_counter;
         }
         match intstruction {
             Instruction::Add(target) => {
@@ -117,6 +117,7 @@ impl Cpu {
                 self.program_counter.wrapping_add(1)
             }
             Instruction::Set(target, bit) => {
+                // TODO: HLI Handle
                 let register: &mut u8 = self.register_reference(target);
                 let value = set(*register, bit);
                 *register = value;
@@ -124,6 +125,7 @@ impl Cpu {
                 self.program_counter.wrapping_add(2)
             }
             Instruction::Reset(target, bit) => {
+                // TODO: HLI Handle
                 let register: &mut u8 = self.register_reference(target);
                 let value = reset(*register, bit);
                 *register = value;
@@ -138,8 +140,12 @@ impl Cpu {
                 // Do not set carry
                 self.registers.f.half_carry = (original & 0xF) + (value & 0xF) > 0xF;
 
-                let register: &mut u8 = self.register_reference(target);
-                *register = value;
+                if matches!(target, TargetRegister::HLI) {
+                    self.memory.write_byte(self.registers.get_hl(), value);
+                } else {
+                    let register: &mut u8 = self.register_reference(target);
+                    *register = value;
+                }
 
                 self.program_counter.wrapping_add(1)
             }
@@ -151,8 +157,12 @@ impl Cpu {
                 // Do not set carry
                 self.registers.f.half_carry = (original & 0xF) + (value & 0xF) > 0xF;
 
-                let register: &mut u8 = self.register_reference(target);
-                *register = value;
+                if matches!(target, TargetRegister::HLI) {
+                    self.memory.write_byte(self.registers.get_hl(), value);
+                } else {
+                    let register: &mut u8 = self.register_reference(target);
+                    *register = value;
+                }
 
                 self.program_counter.wrapping_add(1)
             }
@@ -177,6 +187,7 @@ impl Cpu {
                 self.registers.f.carry = carry == 1;
                 self.registers.f.half_carry = false;
 
+                // TODO: HLI Handle
                 let register: &mut u8 = self.register_reference(target);
                 *register = value;
 
@@ -206,6 +217,7 @@ impl Cpu {
                 self.registers.f.carry = carry == 1;
                 self.registers.f.half_carry = false;
 
+                // TODO: HLI Handle
                 let register: &mut u8 = self.register_reference(target);
                 *register = value;
 
@@ -240,6 +252,7 @@ impl Cpu {
                 self.registers.f.carry = false;
                 self.registers.f.half_carry = false;
 
+                // TODO: HLI Handle
                 let register: &mut u8 = self.register_reference(target);
                 *register = new_value;
 
@@ -388,7 +401,7 @@ impl Cpu {
             }
             Instruction::RST(reset_address) => {
                 let new_address: u16 = reset_address;
-                self.stack_push(new_address.wrapping_add(1));
+                self.stack_push(self.program_counter.wrapping_add(1));
                 new_address
             }
             Instruction::Return(test) => {
@@ -519,12 +532,11 @@ impl Cpu {
 
                 if should_jump {
                     // Get the (Little Endian) address to jump to
-                    let lsb = self.memory.read_byte(self.program_counter + 1) as i8;
-                    if lsb >= 0 {
-                        self.program_counter.wrapping_add(1 + lsb.abs() as u16)
-                    } else {
-                        self.program_counter.wrapping_sub(lsb.abs() as u16 - 1)
-                    }
+                    let offset = self.memory.read_byte(self.program_counter + 1) as i8;
+                    self.program_counter
+                        .wrapping_add(2)
+                        .wrapping_add(offset as u16)
+                    // TODO: test this, I am not convinced -10 -> u16 converts correctly
                 } else {
                     // Jump over the two bytes specifying the jump location
                     self.program_counter.wrapping_add(2)

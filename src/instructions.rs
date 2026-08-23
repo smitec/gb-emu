@@ -424,7 +424,7 @@ impl Instruction {
             0xE9 => Some(Self::JumpToHL),
 
             0xCD => Some(Self::Call(JumpTest::Always)),
-            0xC4 | 0xCC | 0xD4 | 0xDC => Some(Self::Call(JumpTest::NotZero)),
+            0xC4 | 0xCC | 0xD4 | 0xDC => Some(Self::Call(extract_jump_test(byte))),
 
             0xC1 | 0xD1 | 0xE1 | 0xF1 => Some(Self::Pop(extract_stack_target(byte))),
             0xC5 | 0xD5 | 0xE5 | 0xF5 => Some(Self::Push(extract_stack_target(byte))),

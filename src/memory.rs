@@ -1,14 +1,14 @@
 use crate::gpu::*;
 
 pub struct Memory {
-    memory: [u8; 0xFFFF],
+    memory: [u8; 0x10000],
     gpu: Gpu,
 }
 
 impl Memory {
     pub fn new() -> Memory {
         Memory {
-            memory: [0u8; 0xFFFF],
+            memory: [0u8; 0x10000],
             gpu: Gpu::new(),
         }
     }
